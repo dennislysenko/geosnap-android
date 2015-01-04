@@ -4,16 +4,15 @@ import android.app.AlertDialog;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Matrix;
 import android.media.ExifInterface;
-import android.net.Uri;
 import android.os.AsyncTask;
+import android.os.Bundle;
 import android.provider.BaseColumns;
 import android.provider.MediaStore;
 import android.support.v4.app.FragmentActivity;
-import android.os.Bundle;
 import android.widget.ImageView;
 
-import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
@@ -162,6 +161,18 @@ public class MapActivity extends FragmentActivity {
 
                 // And read it in
                 Bitmap imageBitmap = BitmapFactory.decodeFile(pair.getImageFile().toString(), realOptions);
+
+                // Rotate it if needed
+                int orientation = getExifOrientation(pair.getImageFile().toString());
+                if (orientation > 0) {
+                    Matrix matrix = new Matrix();
+                    matrix.setRotate(orientation);
+
+                    imageBitmap = Bitmap.createBitmap(imageBitmap, 0, 0, imageBitmap.getWidth(),
+                            imageBitmap.getHeight(), matrix, true);
+                }
+
+                // And set it
                 image.setImageBitmap(imageBitmap);
 
 
@@ -170,6 +181,40 @@ public class MapActivity extends FragmentActivity {
                         .setView(image)
                         .create().show();
                 return false;
+            }
+
+            private int getExifOrientation(String filePath) {
+                int orientationTag;
+
+                try {
+                    ExifInterface exif = new ExifInterface(filePath);
+                    orientationTag = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    return -1;
+                }
+
+                switch (orientationTag) {
+                    case ExifInterface.ORIENTATION_NORMAL:
+                        return 0;
+
+                    case ExifInterface.ORIENTATION_ROTATE_90:
+                        return 90;
+
+                    case ExifInterface.ORIENTATION_ROTATE_180:
+                        return 180;
+
+                    case ExifInterface.ORIENTATION_ROTATE_270:
+                        return 270;
+
+                    case ExifInterface.ORIENTATION_FLIP_HORIZONTAL:
+                    case ExifInterface.ORIENTATION_FLIP_VERTICAL:
+                    case ExifInterface.ORIENTATION_UNDEFINED:
+                    case ExifInterface.ORIENTATION_TRANSPOSE:
+                    case ExifInterface.ORIENTATION_TRANSVERSE:
+                    default:
+                        return -1;
+                }
             }
         });
     }
