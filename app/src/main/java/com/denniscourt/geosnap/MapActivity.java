@@ -2,8 +2,10 @@ package com.denniscourt.geosnap;
 
 import android.app.AlertDialog;
 import android.database.Cursor;
+import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.media.ExifInterface;
+import android.net.Uri;
 import android.os.AsyncTask;
 import android.provider.BaseColumns;
 import android.provider.MediaStore;
@@ -70,6 +72,9 @@ public class MapActivity extends FragmentActivity {
 
     private Map<String, ImageLocationPair> snaps;
     private int snapId = 0;
+
+    private static final int MAX_WIDTH = 2048;
+    private static final int MAX_HEIGHT = 2048;
 
     /**
      * This is where we can add markers or lines, add listeners or move the camera. In this case, we
@@ -140,7 +145,25 @@ public class MapActivity extends FragmentActivity {
                 ImageLocationPair pair = snaps.get(marker.getSnippet());
 
                 ImageView image = new ImageView(getApplicationContext());
-                image.setImageBitmap(BitmapFactory.decodeFile(pair.getImageFile().toString()));
+
+                // Calculate bounds first to see if the image is too big to fit in memory
+                BitmapFactory.Options boundsOptions = new BitmapFactory.Options();
+                boundsOptions.inJustDecodeBounds = true;
+                BitmapFactory.decodeFile(pair.getImageFile().toString(), boundsOptions);
+
+                // Then set inSampleSize high enough that the read image will fit in memory
+                int inSamplesBasedOnWidth = Math.max(1, (int) Math.ceil((double) boundsOptions.outWidth / MAX_WIDTH));
+                int inSamplesBasedOnHeight = Math.max(1, (int)Math.ceil((double) boundsOptions.outHeight / MAX_HEIGHT));
+
+                int inSamples = Math.max(inSamplesBasedOnWidth, inSamplesBasedOnHeight);
+
+                BitmapFactory.Options realOptions = new BitmapFactory.Options();
+                realOptions.inSampleSize = inSamples;
+
+                // And read it in
+                Bitmap imageBitmap = BitmapFactory.decodeFile(pair.getImageFile().toString(), realOptions);
+                image.setImageBitmap(imageBitmap);
+
 
                 AlertDialog.Builder builder = new AlertDialog.Builder(MapActivity.this);
                 builder.setTitle("Image")
