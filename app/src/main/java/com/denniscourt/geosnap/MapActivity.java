@@ -1,12 +1,27 @@
 package com.denniscourt.geosnap;
 
+import android.app.AlertDialog;
+import android.database.Cursor;
+import android.graphics.BitmapFactory;
+import android.media.ExifInterface;
+import android.os.AsyncTask;
+import android.provider.BaseColumns;
+import android.provider.MediaStore;
 import android.support.v4.app.FragmentActivity;
 import android.os.Bundle;
+import android.widget.ImageView;
 
+import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 public class MapActivity extends FragmentActivity {
 
@@ -53,6 +68,9 @@ public class MapActivity extends FragmentActivity {
         }
     }
 
+    private Map<String, ImageLocationPair> snaps;
+    private int snapId = 0;
+
     /**
      * This is where we can add markers or lines, add listeners or move the camera. In this case, we
      * just add a marker near Africa.
@@ -61,5 +79,75 @@ public class MapActivity extends FragmentActivity {
      */
     private void setUpMap() {
         mMap.addMarker(new MarkerOptions().position(new LatLng(0, 0)).title("Marker"));
+
+        new AsyncTask<Void, Void, Void>() {
+            @Override
+            protected Void doInBackground(Void... params) {
+                try {
+                    getImageLocationPairsFromGallery();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                return null;
+            }
+
+            public void getImageLocationPairsFromGallery() throws IOException {
+                Cursor newImageCursor = getContentResolver().query(
+                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                        new String[] { MediaStore.Images.ImageColumns.DATA,
+                                MediaStore.Images.ImageColumns.DATE_TAKEN,
+                                BaseColumns._ID },
+                                null,
+                                null,
+                                MediaStore.Images.ImageColumns.DATE_TAKEN + " DESC");
+
+                snaps = new HashMap<>();
+                if (newImageCursor.moveToFirst()) {
+                    do {
+                        String path = newImageCursor.getString(0);
+                        ExifInterface exif = new ExifInterface(path);
+
+                        float[] latLong = new float[2];
+                        exif.getLatLong(latLong);
+
+                        LatLng location = new LatLng(latLong[0], latLong[1]);
+
+                        snaps.put("" + (snapId++), new ImageLocationPair(location, new File(path)));
+                    } while (newImageCursor.moveToNext());
+                }
+            }
+
+            @Override
+            protected void onPostExecute(Void aVoid) {
+                super.onPostExecute(aVoid);
+
+                if (snaps != null && snaps.size() > 0) {
+                    for (String snapId : snaps.keySet()) {
+                        ImageLocationPair firstPair = snaps.get(snapId);
+                        mMap.addMarker(
+                                new MarkerOptions()
+                                        .position(firstPair.getLocation())
+                                        .snippet(snapId)
+                        );
+                    }
+                }
+            }
+        }.execute();
+
+        mMap.setOnMarkerClickListener(new GoogleMap.OnMarkerClickListener() {
+            @Override
+            public boolean onMarkerClick(Marker marker) {
+                ImageLocationPair pair = snaps.get(marker.getSnippet());
+
+                ImageView image = new ImageView(getApplicationContext());
+                image.setImageBitmap(BitmapFactory.decodeFile(pair.getImageFile().toString()));
+
+                AlertDialog.Builder builder = new AlertDialog.Builder(MapActivity.this);
+                builder.setTitle("Image")
+                        .setView(image)
+                        .create().show();
+                return false;
+            }
+        });
     }
 }
